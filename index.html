@@ -1,11 +1,260 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Sports Day — Callback Simulation</title>
+  <style>
+    :root{--bg:#0f172a;--card:#0b1220;--accent:#06b6d4;--muted:#94a3b8;--glass:rgba(255,255,255,0.04)}
+    html,body{height:100%;margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,'Helvetica Neue',Arial}
+    body{background:linear-gradient(180deg,#071029 0%, #071a2b 60%);color:#e6eef6;display:flex;align-items:center;justify-content:center;padding:24px}
+    .wrap{width:920px;max-width:96%;background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));border-radius:12px;padding:18px;box-shadow:0 8px 30px rgba(2,6,23,0.7)}
+    header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+    h1{font-size:20px;margin:0}
+    .controls{display:flex;gap:8px;align-items:center}
+    button{background:var(--accent);border:0;padding:10px 14px;border-radius:8px;color:#042027;font-weight:600;cursor:pointer}
+    button.secondary{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--muted);font-weight:600}
+    .main{display:grid;grid-template-columns:2fr 1fr;gap:12px}
+    .panel{background:var(--card);border-radius:10px;padding:12px}
+    #log{height:420px;overflow:auto;background:linear-gradient(180deg,rgba(255,255,255,0.01),transparent);padding:12px;border-radius:8px;font-family:monospace;font-size:13px}
+    .scoreboard{display:flex;flex-direction:column;gap:10px}
+    .team{display:flex;align-items:center;justify-content:space-between;padding:10px;border-radius:8px;background:var(--glass)}
+    .team .left{display:flex;gap:10px;align-items:center}
+    .dot{width:16px;height:16px;border-radius:50%}
+    .red{background:#ef4444}.blue{background:#3b82f6}.green{background:#10b981}.yellow{background:#f59e0b}
+    .positions{margin-top:12px}
+    .winner{font-weight:700;padding:8px;border-radius:8px;background:linear-gradient(90deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01))}
+    label{display:block;font-size:13px;color:var(--muted);margin-top:8px}
+    select,input[type=text]{width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit}
+    footer{margin-top:12px;color:var(--muted);font-size:13px}
+    .small{font-size:12px;color:var(--muted)}
+  </style>
 </head>
 <body>
-    <script src="script.js"></script>
+  <div class="wrap">
+    <header>
+      <h1>Sports Day — Callback Simulation</h1>
+      <div class="controls">
+        <button id="startBtn">Start Sports Day</button>
+        <button id="resetBtn" class="secondary">Reset</button>
+      </div>
+    </header>
+
+    <div class="main">
+      <div class="panel">
+        <div id="log" aria-live="polite"></div>
+      </div>
+
+      <aside class="panel">
+        <div class="scoreboard">
+          <div class="team"><div class="left"><span class="dot red"></span><div>Red</div></div><div id="score-red">0</div></div>
+          <div class="team"><div class="left"><span class="dot blue"></span><div>Blue</div></div><div id="score-blue">0</div></div>
+          <div class="team"><div class="left"><span class="dot green"></span><div>Green</div></div><div id="score-green">0</div></div>
+          <div class="team"><div class="left"><span class="dot yellow"></span><div>Yellow</div></div><div id="score-yellow">0</div></div>
+        </div>
+
+        <div style="margin-top:12px">
+          <label for="highJumpSelect">High Jump Winner (manual input)</label>
+          <select id="highJumpSelect">
+            <option value="">-- pick a color or wait for prompt --</option>
+            <option value="red">Red</option>
+            <option value="blue">Blue</option>
+            <option value="green">Green</option>
+            <option value="yellow">Yellow</option>
+            <option value="invalid">Invalid / Cancel</option>
+          </select>
+          <div style="margin-top:8px;display:flex;gap:8px">
+            <button id="submitHigh" class="secondary">Submit High Jump</button>
+            <button id="skipHigh" class="secondary">Skip High Jump</button>
+          </div>
+
+          <div class="positions" id="positions"></div>
+        </div>
+      </aside>
+    </div>
+
+    <footer>
+      <div class="small">Instructions: Click <strong>Start Sports Day</strong>. Opening ceremony counts down every second. Race100M runs after 3s, Long Jump after 2s, then High Jump (use the dropdown or submit when prompted). Award ceremony runs automatically last.</div>
+    </footer>
+  </div>
+
+  <script>
+    // Utility helpers
+    const logEl = document.getElementById('log');
+    const startBtn = document.getElementById('startBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const submitHigh = document.getElementById('submitHigh');
+    const skipHigh = document.getElementById('skipHigh');
+    const highSelect = document.getElementById('highJumpSelect');
+    const posEl = document.getElementById('positions');
+
+    function log(...args){
+      const line = document.createElement('div');
+      line.textContent = args.join(' ');
+      logEl.prepend(line);
+    }
+
+    function updateScoresUi(score){
+      document.getElementById('score-red').textContent = score.red;
+      document.getElementById('score-blue').textContent = score.blue;
+      document.getElementById('score-green').textContent = score.green;
+      document.getElementById('score-yellow').textContent = score.yellow;
+    }
+
+    function resetUI(){
+      logEl.innerHTML = '';
+      posEl.innerHTML = '';
+      highSelect.value = '';
+      updateScoresUi({red:0,blue:0,green:0,yellow:0});
+    }
+
+    // -- Event implementations using callbacks --
+
+    function OpeningCeremony(next){
+      log('🏁 Opening ceremony has started...');
+      let counter = 3;
+      const interval = setInterval(()=>{
+        log(`Starting in ${counter}...`);
+        counter--;
+        if(counter < 0){
+          clearInterval(interval);
+          const score = {red:0,blue:0,green:0,yellow:0};
+          log("✨ Let's begin the Sports Day!");
+          updateScoresUi(score);
+          // call next with score and Race100M as next callback
+          next(score, Race100M);
+        }
+      }, 1000);
+    }
+
+    function Race100M(score, next){
+      log('🏃‍♂️ Race 100M will start in 3 seconds...');
+      setTimeout(()=>{
+        // random times between 10.00 and 15.00 seconds (2 decimals)
+        const raceTimes = {
+          red: +(10 + Math.random()*5).toFixed(2),
+          blue: +(10 + Math.random()*5).toFixed(2),
+          green: +(10 + Math.random()*5).toFixed(2),
+          yellow: +(10 + Math.random()*5).toFixed(2)
+        };
+        log('⏱️ Race 100M Times:', JSON.stringify(raceTimes));
+
+        const sorted = Object.entries(raceTimes).sort((a,b)=>a[1]-b[1]);
+        const first = sorted[0][0];
+        const second = sorted[1][0];
+
+        score[first] += 50;
+        score[second] += 25;
+
+        log(`🏆 Race winners: 1st=${first} (+50), 2nd=${second} (+25)`);
+        updateScoresUi(score);
+        // pass score to next
+        next(score, LongJump);
+      },3000);
+    }
+
+    function LongJump(score, next){
+      log('🏅 Long Jump will start in 2 seconds...');
+      setTimeout(()=>{
+        const colors = ['red','blue','green','yellow'];
+        const winner = colors[Math.floor(Math.random()*colors.length)];
+        score[winner] += 100;
+        log(`🥇 Long Jump Winner: ${winner} (+100)`);
+        updateScoresUi(score);
+        next(score, HighJump);
+      },2000);
+    }
+
+    // For HighJump we will either use the dropdown input or allow programmatic prompt
+    function HighJump(score, next){
+      log('🤸 High Jump: please provide the winner using the dropdown or click Submit when ready.');
+
+      // Handler that consumes selection once
+      function consumeSelection(){
+        const val = highSelect.value;
+        if(!val){
+          log('⚠️ No selection made — no points awarded for High Jump.');
+        } else if(val === 'invalid'){
+          log('⚠️ Invalid selection chosen — no points awarded.');
+        } else if(!score.hasOwnProperty(val)){
+          log('⚠️ Unknown color — no points awarded.');
+        } else {
+          score[val] += 150;
+          log(`🏆 High Jump Winner: ${val} (+150)`);
+          updateScoresUi(score);
+        }
+
+        // cleanup listeners to avoid duplicate calls
+        submitHigh.removeEventListener('click', submitHandler);
+        skipHigh.removeEventListener('click', skipHandler);
+
+        // continue
+        next(score, AwardCeremony);
+      }
+
+      const submitHandler = (e)=>{ consumeSelection(); };
+      const skipHandler = (e)=>{ log('⏭️ High Jump skipped by user.'); submitHigh.removeEventListener('click', submitHandler); skipHigh.removeEventListener('click', skipHandler); next(score, AwardCeremony); };
+
+      submitHigh.addEventListener('click', submitHandler);
+      skipHigh.addEventListener('click', skipHandler);
+
+      // As a fallback, also prompt after 8s if user doesn't interact
+      const fallback = setTimeout(()=>{
+        if(!submitHigh.onclick){ /* noop - we still call fallback to move on */ }
+        log('⏳ No manual High Jump input yet — defaulting to prompt.');
+        // show a prompt (browser) as fallback
+        const user = prompt('Which color won the High Jump? (red/blue/green/yellow)');
+        if(user === null || user === ''){
+          log('❌ Prompt cancelled or empty — no points awarded.');
+        } else {
+          const c = user.trim().toLowerCase();
+          if(score.hasOwnProperty(c)){
+            score[c] += 150;
+            log(`🏆 High Jump Winner (prompt): ${c} (+150)`);
+            updateScoresUi(score);
+          } else {
+            log('⚠️ Prompt input invalid — no points awarded.');
+          }
+        }
+        // ensure listeners removed then continue
+        submitHigh.removeEventListener('click', submitHandler);
+        skipHigh.removeEventListener('click', skipHandler);
+        next(score, AwardCeremony);
+      },8000);
+
+    }
+
+    function AwardCeremony(score){
+      log('🎉 Award Ceremony Started! Final Scores:');
+      log(JSON.stringify(score));
+
+      const sorted = Object.entries(score).sort((a,b)=>b[1]-a[1]);
+      posEl.innerHTML = '';
+      const labels = ['🥇 1st Place','🥈 2nd Place','🥉 3rd Place','🎗️ 4th Place'];
+      sorted.forEach((entry, idx)=>{
+        const div = document.createElement('div');
+        div.className = 'winner';
+        div.textContent = `${labels[idx]} — ${entry[0].toUpperCase()} (${entry[1]} pts)`;
+        posEl.appendChild(div);
+      });
+
+      log('🏁 Ceremony complete — congratulations to the winners!');
+    }
+
+    // Wiring up the flow: OpeningCeremony -> Race100M -> LongJump -> HighJump -> AwardCeremony
+    startBtn.addEventListener('click', ()=>{
+      startBtn.disabled = true;
+      resetBtn.disabled = false;
+      OpeningCeremony(Race100M);
+    });
+
+    resetBtn.addEventListener('click', ()=>{
+      startBtn.disabled = false;
+      resetUI();
+    });
+
+    // initialize UI
+    resetUI();
+  </script>
 </body>
 </html>
